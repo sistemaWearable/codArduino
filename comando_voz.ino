@@ -1,11 +1,3 @@
-#include <SoftwareSerial.h>
-#include "VoiceRecognitionV3.h"
-
-/**        
-  Arduino    VoiceRecognitionModule
-   2   ------->     TX
-   3   ------->     RX
-*/
 VR myVR(2,3);
 
 uint8_t records[7]; // save record
@@ -14,7 +6,6 @@ uint8_t buf[64];
 int vibrador = 9;
 
 #define PARAR_ALARME    (0)
-#define TAREFA_FEITA   (1) 
 
 void printSignature(uint8_t *buf, int len)
 {
@@ -62,45 +53,18 @@ void printVR(uint8_t *buf)
   Serial.println("\r\n");
 }
 
-void setup()
-{
-  myVR.begin(9600);
-  
-  Serial.begin(115200);
-  Serial.println("Vibrador está ativo");
-  
-  pinMode(vibrador, OUTPUT);
-    
-  if(myVR.clear() == 0){
-    Serial.println("Reconhecedor apagado.");
-  }else{
-    Serial.println("VoiceRecognitionModule não foi encontrado.");
-    Serial.println("Por favor, cheque a conexão e reinicie o Arduino.");
-    while(1);
-  }
-  
-  if(myVR.load((uint8_t)PARAR_ALARME) >= 0){
-    Serial.println("onRecord loaded");
-  }
-  
-  if(myVR.load((uint8_t)TAREFA_FEITA) >= 0){
-    Serial.println("offRecord loaded");
-  }
-}
-
-void loop()
-{
+void comandoVoz(){
   int ret;
   ret = myVR.recognize(buf, 50);
+
   if(ret<0){
     switch(buf[1]){
       case PARAR_ALARME:
-        digitalWrite(vibrador, LOW);
+        if(digitalWrite(vibrador) == HIGH){
+          digitalWrite(vibrador, LOW);
+        }
         break;
-      case TAREFA_FEITA:
-        digitalWrite(vibrador, LOW);
-        break;
-      default:
+        default:
         Serial.println("Função Record indefinida");
         break;
     }
