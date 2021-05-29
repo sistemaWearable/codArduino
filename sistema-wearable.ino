@@ -4,39 +4,77 @@
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_MLX90614.h>
 #include "RTClib.h"
+#include <Arduino_JSON.h>
+#include <WiFi.h>
+#include <HTTPClient.h>  
+#include <SoftwareSerial.h>
+#include "VoiceRecognitionV3.h"
+
 
 //Definindo o tamanho da tela em pixels
 #define SCREEN_WIDTH 128 
 #define SCREEN_HEIGHT 64
 //Declaração para o SH1106 conectar ao I2C (pinos SDA e SCL)
 #define OLED_RESET 4
+#define botao 12 //Definindo o botão
+
+
+int pressionado = 0; //Define se o botão está pressionado ou não
+int BPM;
+float tempCorporal;
+char daysOfTheWeek[7][12] = {"Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"};
+
 
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
-
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 RTC_DS3231 rtc;
-char daysOfTheWeek[7][12] = {"Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"};
-
-#define botao 2 //Definindo o botão
-int pressionado = 0; //Define se o botão está pressionado ou não
-
-float tempCorporal;
 
 void setup() {
   Serial.begin(9600);
   delay(3000);
 
-  mlx.begin();
-  
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    while (1);
+  /*Inicia o Wi-fi*/
+
+  WiFi.begin(ssid, password); 
+
+  while (WiFi.status() != WL_CONNECTED) { //Verifica a conexão
+    delay(1000);
+    Serial.println("Conectando ao Wifi..");
   }
 
-  if (rtc.lostPower()) {
-    Serial.println("RTC lost power, lets set the time!");
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  Serial.println("Wifi Conectado");
+
+  /*comando de voz*/
+  
+  myVR.begin(9600);
+
+  if(myVR.clear() == 0){
+    Serial.println("Reconhecedor apagado.");
+  }else{
+    Serial.println("VoiceRecognitionModule não foi encontrado.");
+    Serial.println("Por favor, cheque a conexão e reinicie o Arduino.");
+    while(1);
+  }
+  
+  if(myVR.load((uint8_t)PARAR_ALARME) >= 0){
+    Serial.println("onRecord carregado");
+  }
+  
+  if(myVR.load((uint8_t)PARAR_ALARME) >= 0){
+    Serial.println("offRecord carregado");
+  }
+
+  /*Inicia o mlx (sensor de temperatura corporal)*/
+
+  mlx.begin();
+
+
+  /*Procura se o rtc está ativo*/
+  
+  if (! rtc.begin()) {
+    Serial.println("RTC não foi encontrado");
+    while (1);
   }
 
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -44,8 +82,13 @@ void setup() {
   //botao
   pinMode(botao,INPUT_PULLUP);
 
+  //motor vibracao
+  pinMode(vibrador, OUTPUT);
+  digitalWrite(vibrador, LOW);
+
+  //configurações displat oled
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));
+    Serial.println(F("Falha ao localizar o display OLED"));
     for(;;); // 
   }
 
@@ -53,16 +96,6 @@ void setup() {
   display.clearDisplay();
   display.display();
   display.setTextColor(WHITE, BLACK);
-  //delay(2000); // Pause for 2 seconds
-
-  // Draw a single pixel in white
-  //display.drawPixel(10, 10, SSD1306_WHITE);
-
-  // Show the display buffer on the screen. You MUST call display() after
-  // drawing commands to make them visible on screen!
-  /*display.display();
-  delay(2000);*/
-
 }
 
 void loop() {
@@ -106,7 +139,6 @@ void loop() {
         horaAt = now.hour();
         //sprintf =  retorna o número de bytes que são gravados na matriz, sem contar o caractere nulo final.
         sprintf(buffer, "%02d:%02d", horaAt, minAt);
-      
         display.setTextSize(2);
         display.setCursor(0,10);
         display.print("Hora:");
@@ -136,11 +168,16 @@ void loop() {
         display.print(tempCorporal);
         display.display();
       }else if(pressionado==5){
-        display.clearDisplay(); 
+        display.clearDisplay();
+
+        BPM = analogRead(0);
+         
         display.setTextSize(2);
         display.writeFillRect(0,50,128,16,BLACK);
         display.setCursor(0,10);
-        display.print(analogRead(32));
+        display.print("BPM: ");
+        display.setCursor(0,32);
+        display.print(BPM);
         display.display();
         pressionado=0; 
       }
@@ -148,4 +185,8 @@ void loop() {
     Serial.println(pressionado);
     delay(400);
   }
+
+  reqPOST();
+  reqGET();
+  comandoVoz();
 }
